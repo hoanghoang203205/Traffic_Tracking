@@ -1,0 +1,7 @@
+path: /home/vuchanhuy/PycharmProjects/Vehicle Counting & Tracking/Master_Dataset # Đường dẫn tương đối từ vị trí chạy file train
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 4
+names: ['Bike', 'Car', 'Bus', 'Truck']

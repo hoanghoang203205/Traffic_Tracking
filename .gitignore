@@ -1,0 +1,18 @@
+# Bỏ qua môi trường ảo
+venv/
+anaconda3/
+.env
+
+# Bỏ qua các file cache của Python
+__pycache__/
+*.pyc
+
+# Bỏ qua các file Video nặng (Chỉ nên up ảnh chụp màn hình làm demo)
+*.mp4
+*.avi
+*.mkv
+
+# (Tùy chọn) Bỏ qua toàn bộ thư mục runs của YOLO nếu nó quá nặng,
+# chỉ giữ lại file best.pt bằng cách copy nó ra ngoài thư mục gốc.
+runs/
+
