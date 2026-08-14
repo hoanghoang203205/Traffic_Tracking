@@ -5,6 +5,7 @@ import tempfile
 import os
 from ultralytics import YOLO
 from deep_sort_realtime.deepsort_tracker import DeepSort
+import time
 
 # --- Web UI Configuration ---
 st.set_page_config(page_title="Hệ Thống Đếm Xe Ban Đêm", page_icon="🚦", layout="wide")
@@ -21,7 +22,7 @@ def check_intersect(A, B, C, D):
     return ccw(C, D, A) != ccw(C, D, B) and ccw(A, B, C) != ccw(A, B, D)
 
 line_A = (100, 350)
-line_B = (600, 350)
+line_B = (850, 350)
 
 # --- Sidebar & File Upload ---
 st.sidebar.header("Tải Video Lên")
@@ -35,12 +36,23 @@ if uploaded_file is not None:
 
     st.sidebar.success("Tải video thành công! Hệ thống đang xử lý...")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4, col5 = st.columns(5)
     metric_in = col1.empty()
     metric_out = col2.empty()
+    metric_fps = col3.empty()
+    metric_latency = col4.empty()
+    metric_accuracy = col5.empty()
     stframe = st.empty()  
-    
+
     stop_button = st.sidebar.button("Dừng Xử Lý")
+
+    # --- TÍNH NĂNG ĐÁNH GIÁ (EVALUATION MODE) ---
+    st.sidebar.markdown("---")
+    st.sidebar.header("Chế độ Đánh giá (Evaluation)")
+    st.sidebar.caption("Sử dụng để kiểm chứng độ chính xác so với đếm thủ công (Ground Truth).")
+    is_eval_mode = st.sidebar.checkbox("Kích hoạt tính toán Accuracy")
+    ground_truth = st.sidebar.number_input("Nhập số xe thực tế trong video (Ground Truth)", min_value=1, value=50,
+                                           step=1)
 
     # --- State Management ---
     track_history = {}
@@ -52,7 +64,7 @@ if uploaded_file is not None:
     @st.cache_resource
     def load_model_and_tracker():
         """Cache models to prevent reloading on UI updates."""
-        model = YOLO("runs/detect/Vehicle_Tracking/Night_Weather_Model5/weights/best.pt")
+        model = YOLO("C:/Workspace/AI_Project/Traffic_Tracking-main/runs/detect/Vehicle_Tracking/Night_Weather_Model-2/weights/best.pt")
         tracker = DeepSort(
             max_age=30, n_init=3, nms_max_overlap=1.0,
             max_cosine_distance=0.2, embedder="mobilenet", half=True
@@ -68,6 +80,9 @@ if uploaded_file is not None:
         if not success:
             st.success("Đã xử lý xong toàn bộ video!")
             break
+
+        # BẮT ĐẦU BẤM GIỜ TẠI ĐÂY
+        start_time = time.time()
 
         # 1. Detection
         results = model.predict(frame, conf=0.3, verbose=False)[0]
@@ -126,14 +141,35 @@ if uploaded_file is not None:
             active_ids = {track.track_id for track in tracks if track.is_confirmed()}
             track_history = {tid: pos for tid, pos in track_history.items() if tid in active_ids}
 
+        # KẾT THÚC BẤM GIỜ VÀ TÍNH TOÁN METRICS
+        end_time = time.time()
+        processing_time = end_time - start_time
+        latency_ms = processing_time * 1000
+        fps = 1.0 / processing_time if processing_time > 0 else 0
+
         # --- Update Streamlit UI ---
-        metric_in.metric(label="Tổng Xe Đi Vào (IN)", value=count_in)
-        metric_out.metric(label="Tổng Xe Đi Ra (OUT)", value=count_out)
-        stframe.image(frame, channels="BGR", use_container_width=True)
+        metric_in.metric(label="Tổng Xe Đi Vào", value=count_in)
+        metric_out.metric(label="Tổng Xe Đi Ra", value=count_out)
+        metric_fps.metric(label="Tốc độ (FPS)", value=f"{fps:.1f}")
+        metric_latency.metric(label="Độ trễ", value=f"{latency_ms:.1f} ms")
+
+        # TÍNH TOÁN VÀ HIỂN THỊ ACCURACY NẾU BẬT EVALUATION MODE
+        if is_eval_mode:
+            total_counted = count_in + count_out
+            # Tính sai số tuyệt đối
+            error = abs(total_counted - ground_truth)
+            # Tính Accuracy (%)
+            accuracy = max(0.0, 100.0 - (error / ground_truth) * 100.0)
+            metric_accuracy.metric(label="Độ chính xác (%)", value=f"{accuracy:.2f}%")
+        else:
+            metric_accuracy.metric(label="Độ chính xác (%)", value="N/A")
+
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        stframe.image(frame_rgb, use_container_width=True)
 
     cap.release()
     try:
-        os.remove(video_path) 
+        os.remove(video_path)
     except Exception:
         pass
 
